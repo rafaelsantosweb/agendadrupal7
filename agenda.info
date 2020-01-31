@@ -1,0 +1,10 @@
+name = Agenda
+description = custom agenda for PUC Journal
+core = 7.x
+version = 7.x-1.0
+
+files[] = class/calendar.class.php
+files[] = class/vamosver.class.php
+files[] = class/AgendaPUC.class.php
+
+/* Autor @Rafael Santos */

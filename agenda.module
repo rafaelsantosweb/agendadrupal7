@@ -1,0 +1,240 @@
+<?php
+ 
+function agenda_menu() {
+	$items = array();
+    $items['listagem/noticias/%'] = array(
+		'page arguments' => array(2),
+		'page callback' => 'noticias_listagem_categoria',
+		'access_callback' => TRUE,
+		'access arguments' => array('access content'),
+		'type' => MENU_CALLBACK,
+ );
+    $items['listagem/artigos/%'] = array(
+		'page arguments' => array(2),
+		'page callback' => 'artigos_listagem_categoria',
+		'access_callback' => TRUE,
+		'access arguments' => array('access content'),
+		'type' => MENU_CALLBACK,
+ );
+	$items['agenda/%/%'] = array(
+		'page arguments' => array(1,2),
+		'page callback' => 'agenda',
+		'access_callback' => TRUE,
+		'access arguments' => array('access content'),
+		'type' => MENU_CALLBACK,
+  );
+    $items['agendas/%/%'] = array(
+		'page callback' => 'agenda_get_dia', // Render HTML.
+		'page arguments' => array(1,2),
+		'type' => MENU_CALLBACK,
+		'access arguments' => array('access content'),
+		'delivery callback' => 'agenda_ajax_dia',  // Magic goes here.
+
+  );
+    $items['agenda/tipo-evento/%/%'] = array(
+		'page callback' => 'agenda_get_tipo_evento', // Render HTML.
+		'page arguments' => array(2,3),
+		'type' => MENU_CALLBACK,
+		'access arguments' => array('access content'),
+		'delivery callback' => 'agenda_ajax_tipo_de_evento',  // Magic goes here.
+  );
+    $items['agenda/todos-eventos/%'] = array(
+		'page callback' => 'agenda_get_todos_eventos', // Render HTML.
+		'page arguments' => array(2),
+		'type' => MENU_CALLBACK,
+		'access arguments' => array('access content'),
+		'delivery callback' => 'agenda_ajax_todos_de_eventos',  
+  );
+    $items['api/rest/view-videos-jpuc'] = array(
+		'page callback' => 'view_videos_jpuc',
+		'type' => MENU_CALLBACK,
+		'access callback' => TRUE,
+		'access arguments' => array('access content'),
+  );
+  
+  return $items;
+}
+
+function view_videos_jpuc(){
+	$query = db_select('field_data_field_video','v');
+	$query->join('node','n','n.nid = v.entity_id');
+    $query->fields('v',array('field_video_video_id', 'entity_id'));	
+	$query->fields('n',array('created', 'title'));	
+	$query->condition('status', 1);
+	$query->orderBy('n.created', 'DESC');
+	$query->range(0, 9);
+    $result = $query->execute();
+    $array = array();
+    foreach($result as $item) {
+		$url_img = 'https://img.youtube.com/vi/' . $item->field_video_video_id. '/maxresdefault.jpg';
+        $array[] = ['id'=>$item->entity_id, 'url_img'=>$url_img, 'title' => $item->title, 'data' => $item->created];
+    }
+	header("Content-type:application/json"); 
+    print json_encode($array);
+}
+
+function artigos_listagem_categoria($arg) {
+	return theme('template_listagem_artigo', array('arg', $arg));
+}
+function noticias_listagem_categoria($arg) {
+	return theme('template_listagem_categoria', array('arg', $arg));
+}
+
+function agenda_get_dia($mes,$dia) {
+    $node = entity_load('node',FALSE,array('type'=>'agenda'));
+	return theme('template_ajax_dia', array('node' => $node, 'mes' => $mes, 'dia' => $dia));
+}
+
+function agenda_ajax_dia($page_callback) {
+	print $page_callback;
+}
+
+function agenda_get_tipo_evento($arg,$mes) {
+	$node = entity_load('node',FALSE,array('type'=>'agenda'));
+	return theme('template_ajax_tipo', array('node' => $node, 'arg' => $arg, 'mes' => $mes));
+}
+
+function agenda_ajax_tipo_de_evento($page_callback) {
+	print $page_callback;
+}
+
+function agenda_get_todos_eventos($mes) {
+	$node = entity_load('node',FALSE,array('type'=>'agenda'));
+	return theme('template_ajax_todos_eventos', array('node' => $node, 'mes' => $mes));
+}
+
+function agenda_ajax_todos_de_eventos($page_callback){
+	print $page_callback;
+}
+
+function slug($str) {
+	$str = strtolower(trim($str));
+	$str = preg_replace('/[^a-z0-9-]/', '-', $str);
+	$str = preg_replace('/-+/', "-", $str);
+	return $str;
+}
+
+/* custom function */
+function build_calendar($year,$month){
+	
+	/*draw table */
+	$timestamp = mktime(0, 0, 0,$month, 1);
+	$month_name = t(date("F", $timestamp));
+	$calendar = "<div class='calendar-header'><a class='calendar-prev' title='Anterior'><span>Anterior</span></a><a class='calendar-next' title='Próxima'><span>Próxima</span></a>
+	<div class='calendar-title'><span class='calendar-month'>{$month_name}</span><span class='calendar-year'>{$year}</span></div></div>";
+    
+	$calendar.= '<table class="calendar-calendar">';
+	
+	/* table headings */
+	$headings = array('Dom','Seg','Ter','Qua','Qui','Sex','Sáb');
+	$calendar.= '<thead><tr class="day-week-end"><th class="calendar-day-head">'.implode('</th><th class="calendar-day-head">',$headings).'</th></tr></thead>';
+	
+	/* days and weeks vars now ... */
+	
+	$running_day = date('w',mktime(0,0,0,$month,1,$year));
+	$days_in_month = date('t',mktime(0,0,0,$month,1,$year));
+	$days_in_this_week = 1;
+	$day_counter = 0;
+	$dates_array = array();
+	$current_day = date('j');
+
+	/* row for week one */
+	$calendar.= '<tr class="calendar-row">';
+
+	/* print "blank" days until the first of the current week */
+	for($x = 0; $x < $running_day; $x++):
+		$calendar.= '<td class="calendar-day-np"> </td>';
+		$days_in_this_week++;
+	endfor;
+
+	/* keep going with days.... */
+	for($list_day = 1; $list_day <= $days_in_month; $list_day++):
+	    if($current_day == $list_day):
+			$class_dia = 'dia_atual';
+		else:
+			$class_dia = 'dia_nao_atual';
+		endif;
+			$calendar.= "<td class='{$class_dia}'><a href='#' data-mes = '{$month}' id ='{$list_day}'>".$list_day."</a></td>";
+				/* add in the day number */
+			if($running_day == 6):
+				$calendar.= '</tr>';
+				if(($day_counter+1) != $days_in_month):
+					$calendar.= '<tr class="calendar-row">';
+				endif;
+				$running_day = -1;
+				$days_in_this_week = 0;
+			endif;
+			$days_in_this_week++; $running_day++; $day_counter++;
+	endfor;
+
+	/* finish the rest of the days in the week */
+	if($days_in_this_week < 8):
+		for($x = 1; $x <= (8 - $days_in_this_week); $x++):
+			$calendar.= '<td class="calendar-day-np"> </td>';
+		endfor;
+	endif;
+
+	/* final row */
+	$calendar.= '</tr>';
+
+	/* end the table */
+	$calendar.= '</table>';
+	
+	$tipo_de_evento = array();
+	$vocabulary = taxonomy_vocabulary_machine_name_load('tipos_de_eventos');
+	$terms = entity_load('taxonomy_term', FALSE, array('vid' => $vocabulary->vid));
+	
+	$calendar.= '<div class="calendar-subheader"></div>';
+	$calendar.= '<div class="sorting"><ul>';
+	$li = '';
+	$li.= '<li class="ev-title">CLIQUE PARA VER APENAS:</li>';	
+	$li.= "<li><a id='todos-eventos' data-mes = '{$month}' class='todos-itens' href='#'>Todos Os Itens</a></li>";
+	
+	foreach($terms as $term){
+		$dinamic_class = slug($term->name);
+		$li.= "<li><a class='{$dinamic_class}' data-mes = '{$month}' href='#' id='{$term->tid}'>{$term->name}</a></li>";
+	}
+	$calendar.= $li;
+	
+	$calendar.= '</div></ul>';
+	
+	return $calendar;
+}
+
+
+function agenda($year,$month){
+	   
+	   $variable = build_calendar($year, $month);
+	   return theme('template_agenda', array('agenda' => $variable));
+}
+
+function agenda_theme(){
+	return array(
+		'template_agenda' => array(
+			'template'  => 'page-agenda',
+			'variables' => array('agenda' => NULL),
+		),
+		'template_ajax_dia' => array(
+			'template'  => 'page-ajax-dia',
+			'variables' => array('node' => NULL, 'arg' => NULL),
+		),
+		'template_ajax_tipo' => array(
+			'template'  => 'page-ajax-tipo',
+			'variables' => array('node' => NULL, 'arg' => NULL),
+		),
+		'template_ajax_todos_eventos' => array(
+			'template'  => 'page-ajax-todos-eventos',
+			'variables' => array('node' => NULL, 'arg' => NULL),
+		),
+		'template_listagem_categoria' => array(
+			'template'  => 'page-noticias-list-categoria',
+			'variables' => array('arg' => NULL),
+		),
+		'template_listagem_artigo'  => array(
+			'template'  => 'page-artigos-list-categoria',
+			'variables' => array('arg' => NULL),
+		),
+		
+	);
+}
+
